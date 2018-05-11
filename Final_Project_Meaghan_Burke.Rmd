@@ -1,0 +1,394 @@
+---
+title: "Final Project- Data 606"
+author: "Meaghan Burke"
+date: "May 9, 2018"
+output: html_document
+---
+## **New York City Airbnb**
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library(dplyr)
+library(psych)
+library(knitr)
+library(ggplot2)
+```
+
+
+
+```{r pressure, echo=FALSE, fig.cap="Airbnb NYC Image", out.width = '100%'}
+knitr::include_graphics("C:/Users/burke/OneDrive/Desktop/Data 606-Stats/Project Data 606/airbnb_newyork.jpg")
+```
+
+### **Introduction:**
+
+Airbnb is an online marketplace which lets homeowners rent out their properties or spare rooms to guests. Airbnb takes 3% commission of every booking from hosts, and between 6% and 12% from guests. For my final project, I am going to analyze the public Airbnb data of New York City, http://insideairbnb.com/get-the-data.html, which includes information on listings, reviews and neighborhoods. In my analysis, I look to understand why Airbnb listings are priced differently and where a homeowner could get the biggest ROI. As a frequent user of the platform and a New York City native, I am interest to see if my assumptions on pricing per listing, per neighborhood are accurate. 
+
+#### **Hypothesis:**
+
+From the exploration question, hypothesis is defined as follows:
+
+H0: Neighborhoods, room types, minimum nights and reviews have no influence over Airbnb listing prices in NYC
+
+H1: Neighborhoods, room types, minimum nights and reviews have influence over Airbnb listing prices in NYC
+
+
+#### **Data Source:**
+
+New York City Airbnb Data - **Source: http://insideairbnb.com/get-the-data.html:**
+
+*The Airbnb data was collected by Murry Cox. The dataset is meant to be an independent to allows users to analyze Airbnb usage throughout the world. The snapshot data is regularly scraped/updated by Murry Cox. For this project, data was integrated through reading the .csv files. This is considered an observational study.*
+
+-  Reviews data: information and metrics for Airbnb listings in New York City
+
+-  Listing data: timestamp review information
+
+-  Neighborhoods data: neighborhood listing information
+
+
+
+#### **Load The Data**:
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+#load data
+listings <- read.table("C:/Users/burke/OneDrive/Desktop/Data 606-Stats/Project Data 606/Data 606 Data/listings.csv", quote = "", fill=TRUE, header = TRUE, sep = ",", stringsAsFactors=FALSE)
+
+# Data translations- listing data 
+# Converted all the columns with numbers to numeric 
+# The raw columns in the listings dataframe were pretty descriptive, kept original
+
+reformatted.listings <-listings %>% 
+  mutate(price = as.numeric(price, na.rm = TRUE),
+         id = as.numeric(id, na.rm = TRUE),
+         host_id = as.numeric(host_id, na.rm = TRUE),
+         number_of_reviews = as.numeric(number_of_reviews, na.rm = TRUE),
+         minimum_nights = as.numeric(minimum_nights, na.rm = TRUE),
+         calculated_host_listings_count = as.numeric(calculated_host_listings_count, na.rm = TRUE),
+         reviews_per_month = as.numeric(reviews_per_month, na.rm = TRUE),
+         availability_365 = as.numeric(availability_365, na.rm = TRUE)) %>%
+  filter(price > 0 & 
+         number_of_reviews > 0 &
+         reviews_per_month >0 &
+         calculated_host_listings_count > 0 &
+         availability_365 >0 &
+         id >0)%>%
+select(-c(latitude, longitude, id, name, host_id, host_name, last_review, 
+          reviews_per_month, calculated_host_listings_count,availability_365))
+
+```
+
+#### **Filtered Data**:
+
+*The below table displays all NYC Airbnb listings compiled by Murry Cox.*
+```{r echo=FALSE}
+kable(head(reformatted.listings,10),  caption = "Airbnb Listing Data-NYC")
+
+```
+
+#### **Cases:**
+
+*Each case represents a Airbnb listing in the New York City. There are 21,974 observations in the given data set.*
+```{r echo=FALSE,message=FALSE}
+kable(dim(reformatted.listings), caption = "Dimensions of The Airbnb Dataset")
+#dim(comprehensive.listings)
+```
+
+
+#### **Explanatory Variables:**
+
+ -  Number of reviews , numerical
+ -  Minimum night requirement, numerical
+ 
+ -  Neighborhood, categorical
+ -  Room type, categorical
+
+
+#### **Response Variable:**
+
+-  Price, numerical
+
+
+### **Exploratory Analysis:**
+
+#### **Min, Median, Mean, Max, Standard Deviation:**  
+
+The below chart, as an initial inspection of the data, suggests that there are differences in between the median prices per listing/room type/neighborhood
+
+```{r echo=FALSE}
+listing.sd <- reformatted.listings %>%
+                    group_by(neighbourhood_group, neighbourhood, room_type) %>%
+                            summarise(Frequency=n(),
+                           `Min.Value` =  round(min(price),0),
+                           `Median.Value` = round(median(price),0),
+                           `Mean.Value` =  round(mean(price),0),
+                           `Max.Value` =  round(max(price),0),
+                           SD = round(sd(price),0))%>%
+                           arrange(desc(Mean.Value))
+kable(head(listing.sd, 20),  caption = "Airbnb NYC Listing- Count, Mean and Standard Deviation")
+```
+
+#### **Price Analysis:**
+
+From the above chart, it is apparent that there are some outliers in the filtered data set, while the medians are defined by the neighborhood, room type. These intital observations can suggest that the room type, neighborhood could be predictive of listing price as established in the hypothesis.
+
+From the below histogram, normality, skewness to the right and outliers can be confirmed. For visualization purposes,I chose a density histogram with a limited x-axis.
+```{r echo=FALSE}
+hist(reformatted.listings$price, breaks = 100, main="Listing Price Density Histogram", xlab="Airbnb Listing Price", probability = TRUE, xlim = c(0, 2000), col="light green")
+```
+
+
+
+#### **Medians Price Analysis:**
+
+From the calculated medians, we can have the following histogram below. Just like the above price density histogram, normality, skewness to the right and outliers can be confirmed. Based on the below Q-Q Plot, we can visualize how the medians data follow the qqline most of the trajectory. 
+```{r echo=FALSE}
+hist(listing.sd$ Median.Value, breaks = 100, main="Median Listing Price Density Histogram", xlab="Airbnb Median Listing Price", probability = TRUE, xlim = c(0, 500), col="light blue")
+```
+
+```{r echo=FALSE}
+qqnorm(listing.sd$ Median.Value)
+qqline(listing.sd$ Median.Value)
+```
+
+#### **Factor 1) Room Type:**
+
+```{r echo=FALSE}
+rooomtype <- group_by(reformatted.listings, room_type) %>% 
+  summarise(Count = n(),
+            mean.price = round(mean(price)))
+
+kable(rooomtype,  caption = "Room Types")
+```
+
+```{r echo=FALSE}
+summary(rooomtype)
+```
+
+```{r echo=FALSE}
+# plot  room types 
+ggplot(rooomtype, aes(x=reorder(room_type, -Count), y=Count)) + 
+  geom_bar(stat="identity", width=.5, fill="slategray2") +
+  geom_text(aes(label=Count))+
+  labs(x='room_type', 
+       y='Count',
+       title="NYC Airbnb Room Types", 
+       caption="Source: Airbnb Public Data: Count of Listings") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+
+# plot  room types price
+ggplot(rooomtype, aes(x=reorder(room_type, -mean.price), y=mean.price)) + 
+  geom_bar(stat="identity", width=.5, fill="violet") +
+  geom_text(aes(label= mean.price))+
+  labs(x='room_type', 
+       y='Mean Price',
+       title="NYC Airbnb Room Types: Mean Price Per Listing", 
+       caption="Source: Airbnb Public Data") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+```
+
+**Room Type Analysis Summary:**
+
+It is apparent, based on the listing counts, that owners are more inclined to list entire properties than that of private rooms or shared rooms. The entire property listings are observed to be more expensive, on average, than the private rooms or shared rooms. This suggests that room type does impact the price of the NYC Airbnb listing. The impact of room type will be later explored in the regression analysis.
+
+
+#### **Factor 2) Neighborhood:**
+
+```{r echo=FALSE}
+#for plotting, 2 dataframes, one by count, one by price 
+#count
+neighborhood_group.type <- group_by(reformatted.listings, neighbourhood) %>% 
+  summarise(Count = n(),
+            mean.price = round(mean(price)))%>%
+  arrange(desc(Count))
+
+#price
+neighborhood_group.price <- group_by(reformatted.listings, neighbourhood) %>% 
+  summarise(Count = n(),
+            mean.price = round(mean(price)))%>%
+  arrange(desc(mean.price))
+
+kable(head(neighborhood_group.type,20),  caption = "Airbnb NYC-Neighborhood Data")
+```
+
+```{r echo=FALSE}
+summary(neighborhood_group.type)
+```
+
+
+```{r echo=FALSE}
+# plot neighborhoods count
+ggplot(head(neighborhood_group.type,20), aes(x=reorder(neighbourhood, -Count), y=Count)) + 
+  geom_bar(stat="identity", width=.5, fill="light blue") +
+  geom_text(aes(label=Count))+
+  labs(x='neighbourhood_group', 
+       y='Count',
+       title="NYC Airbnb Neighborhoods: Top 20, Count of Listings", 
+       caption="Source: Airbnb Public Data") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+#Price
+ggplot(head(neighborhood_group.price,20), aes(x=reorder(neighbourhood, -mean.price), y=mean.price)) + 
+  geom_bar(stat="identity", width=.5, fill="light green") +
+  geom_text(aes(label=mean.price))+
+  labs(x='neighbourhood_group', 
+       y='Mean Price',
+       title="NYC Airbnb Neighborhoods: Top 20, Mean Price of Listing", 
+       caption="Source: Airbnb Public Data") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+
+```
+
+**Neighborhood Analysis Summary:**
+
+The mean price of the listing per neighborhood suggests that there is some correlation between the two variables. The more expensive listing neighborhoods, minus a few outliers, seem to be in Manhattan proper. The true impact of neighborhood will be later explored in the regression analysis.
+
+
+#### **Exploratory Analysis Initial Insights (Room Types & Neighborhoods):**
+
+It is shown that most property owners are inclined towards listing their entire property. It can also be seen that most of the pricier listings are in Manhattan. Now I will analyze the relationship of prices for different room type and neighborhood on a plotted heat map.
+
+```{r echo=FALSE}
+summarized.listings <- reformatted.listings%>%
+        group_by(room_type,neighbourhood_group)%>%
+        summarise(Count = n(),
+                  mean.price = round(mean(price)))%>%
+        arrange(desc(mean.price))
+
+kable(head(summarized.listings,20),  caption = "NYC Listings Summary- Room Type & Neighborhood")
+
+```
+
+
+```{r echo=FALSE}
+summary(summarized.listings)
+```
+
+
+
+```{r echo=FALSE}
+ggplot(data = summarized.listings, aes(x=room_type, y=neighbourhood_group, fill= mean.price)) + 
+  geom_tile() +
+    scale_fill_gradient(low = "white", high = "red")+
+  labs(title="NYC Airbnb Neighborhoods & Room Type Heat Map", 
+       caption="Source: Airbnb Public Data")  
+```
+
+**Heat Map Summary:**
+
+A entire home/apartment in Manhattan will demand the most expensive listing price, on average.
+
+
+#### **Number of Reviews Distribution:**
+
+```{r echo=FALSE}
+reviews.listings <- reformatted.listings%>%
+                    mutate(reviews =  cut(number_of_reviews, include.lowest=TRUE, seq(from =0, to= 1500, by = 30)))%>%
+                    group_by(neighbourhood_group, reviews )%>%
+                    summarise(Count = n(),
+                              mean.price = round(mean(price)))%>%
+                    arrange(desc(neighbourhood_group, mean.price))
+
+kable(head(reviews.listings,15),  caption = "NYC Listings Summary- Number of Reviews (Top 20)")
+
+```
+
+```{r echo=FALSE}
+ggplot(data = reviews.listings, aes(x=reviews, y=neighbourhood_group, fill= mean.price)) + 
+  geom_tile() + 
+    scale_fill_gradient(low = "white", high = "red")+
+  labs(title="NYC Airbnb Neighborhoods & Reviews", 
+       caption="Source: Airbnb Public Data")  
+    
+```
+
+**Review Analysis Summary:**
+
+There does not seem to be a correlation between the number of reviews and the average price of the listings. 
+
+#### **Minimum Stay Distribution:** 
+
+```{r echo=FALSE}
+stay.listings <- reformatted.listings%>%
+                    filter(minimum_nights>1)%>%
+                    mutate(stay =  cut(minimum_nights,include.lowest=TRUE, seq(from =0, to= 1500, by = 10)))%>%
+                    group_by(stay)%>%
+                    summarise(Count = n(),
+                              mean.price = round(mean(price)))%>%
+                    arrange(desc(mean.price))
+
+kable(stay.listings,  caption = "NYC Listings Summary- Minimum Stay")
+
+```
+```{r echo=FALSE}
+summary(stay.listings)
+```
+
+
+```{r echo=FALSE}
+
+# count
+ggplot(stay.listings, aes(x=reorder(stay, -Count), y= Count)) + 
+  geom_bar(stat="identity", width=.5, fill="dodgerblue") +
+  geom_text(aes(label=mean.price))+
+  labs(x='Number of Nights', 
+       y='Count',
+       title="NYC Airbnb- Listing Counts Per Required Stay", 
+       caption="Source: Airbnb Public Data") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+
+
+# plot stay type mean price
+ggplot(stay.listings, aes(x=reorder(stay, -mean.price), y=mean.price)) + 
+  geom_bar(stat="identity", width=.5, fill="lightcyan") +
+  geom_text(aes(label=mean.price))+
+  labs(x='Number of Nights', 
+       y='Mean Price',
+       title="NYC Airbnb- Mean Price Per Required Stay", 
+       caption="Source: Airbnb Public Data") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+```
+
+**Minimum Stay Analysis Summary:**
+
+
+There does not seem to be a huge correlation between the minimum stay requirement and the average price of the listings. However, unsurprisingly, the bulk of the listings are within the 1 - 10 day range.
+
+
+### **Multiple linear regression:**
+
+```{r echo=FALSE}
+airbnb_multi <- lm(price ~ minimum_nights + number_of_reviews + neighbourhood_group + room_type, data = reformatted.listings)
+summary(airbnb_multi)
+```
+From the above results, the model output indicates some evidence of a difference in the listing price per neighborhood, reviews, minimum stays.
+```{r echo=FALSE}
+anova(airbnb_multi)
+```
+
+
+### **Conclusion:**
+
+From the initial question: Do neighborhoods, room types, minimum nights and reviews have influence over listing prices in NYC? It can be concluded:
+
+The above plots, modeling, and statistical analysis indicate that neighborhoods, room types, minimum nights and reviews and listing price did appear to impact the Airbnb listing price. H0 can be discarded and my alternative hypothesis H1 is accepted. The above conclusion is statistically accepted since the analysis of variance returned an extremely low p-value (2.2e-16) which is less than 0.05. 
+
+Based on your final model, entire property listings in Manhattan are the most expensive.
+
+**It can be concluded from the plots that prices of listings depends upon following factors:**
+
+-  The type of room type. Entire properties are the most expensive, followed by private rooms and shared apartments
+
+-  The neighborhood. Manhattan is the most expensive (on average), followed by Brooklyn, Queens, Statin Island and the Bronx
+
+-  A higher number of reviews did not guarantee a higher average listing price 
+
+-  A stay minimum did not guarantee a higher average listing price
+
+
+
+
+
+
+
