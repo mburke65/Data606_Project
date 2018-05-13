@@ -1,0 +1,276 @@
+---
+title: "Data 607- Final Project"
+author: "Meaghan Burke"
+date: "May 12, 2018"
+output: html_document
+---
+### **Data 607- Final Project:**
+
+#### **Introduction:**
+I currently work as a business intelligence analyst supporting both sales and product managers for a fin-tech firm. Much of my job is using data to help the two groups make informed product and client decisions. For this final project, I would will apply the skills learned in this class to a sampling of data from work to see if I can find actionable insights.
+
+#### **Project Goals- RFM:**
+
+-  Segment the customers based on a RFM analysis. Currently clients are mapped based on industry and division. 
+-  RFM (recency, frequency, monetary) analysis is used to determine a customer ranking by examining how recently a customer has purchased (recency), how often they purchase (frequency), and how much the customer spends (monetary). 
+-  I plan to segment the data into actionable subsets (asset classes) and perform the RFM "peer analysis
+
+### **Data Source(s):**
+
+-  Sales data aggregates
+-  Client metadata aggregates
+
+
+#### **Overview:**
+
+-  Collect account usage data, available in monthly aggregates
+-  Combined all csv files with linux "cat" command
+-  Collect metadata information from the warehouse
+-  Bring the aggregated data into R Studio
+-  Anonymize the sensitive client information
+-  Clean the data (very messy) with dplyr and tidyr
+-  Perform an exploratory analysis on the data
+-  Perform a RFM analysis on the data
+-  Graphically represent my findings using GGPlot2
+-  Attempt to answer to the "Goals" listed above
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(ggplot2)
+library(stringr)
+```
+
+
+### **Obtain The Data:**
+
+- 2017 aggregated sales data (aggregated offline with the linux "cat" command)
+- Category mapping file "ncm"
+- Asset class mapping file "dl.ac"
+
+```{r echo = TRUE}
+raw.data  <- '//corp.bloomberg.com/ny-dfs/Global Data/Other Shared Folders/Worldwide/Global Data/CRA/BI Data Sets/DLME/DLPS/CSV_Meaghan_Versions/csv/2017 Data/combined_2017.csv'
+
+ncm <- "//corp.bloomberg.com/ny-dfs/Global Data/Other Shared Folders/Worldwide/Global Data/CRA/Work Area/Personal Work Area/Meaghan/Tech Working Group/Sales_Prediction/ncm_mapping.csv"
+
+dl.ac <- "//corp.bloomberg.com/ny-dfs/Global Data/Other Shared Folders/Worldwide/Global Data/CRA/Work Area/Personal Work Area/Meaghan/Tech Working Group/Sales_Prediction/dl_asset_class_mapping.csv"
+
+```
+
+```{r echo = TRUE, warning = FALSE, message = FALSE}
+
+initial.data <- read.table(raw.data,  sep=',', encoding='latin-1',header = FALSE, fill = TRUE)
+
+ncm.mapping  <-read.table(ncm,sep=',', encoding='latin-1')%>%
+                rename(Category =V1, Mapping = V2)%>%
+                mutate_if(is.factor, as.character)
+
+dl.ac.mapping = read.table(dl.ac,   sep=',', encoding='latin-1')%>%
+                rename(Asset.Class = V1, Ac.Mapping = V2)%>%
+                mutate_if(is.factor, as.character)
+
+
+```
+#### **Raw data summary:**
+-  The raw dataset is large at approximately 1.4 million rows and 18 columns
+-  Examine the data types of each column to determine if transformations are needed
+```{r echo = TRUE}
+dim(initial.data)
+
+sapply(initial.data, class)
+```
+
+### **Scrub The Data:**
+-  rename the columns 
+-  Remove unneeded columns
+-  Cast the number columns to numerics
+-  filter for the relevant subset of data 
+```{r echo = TRUE, warning = FALSE, message = FALSE}
+clean.data <- initial.data%>%
+                rename(Date = V1, Firm.Num = V2, Division = V4,
+                       Account.Num = V6, Asset.Class = V12, Category = V11,Billing.Model = V9,
+                       Hit.Type = V14, Billed.Qty = V15, Service = V10) %>%
+                select(-c(V3, V5, V7, V8,V13,V16,V17,V18))%>%
+                mutate_at(c(2, 4,10), as.numeric) %>%
+                mutate_if(is.factor, as.character)%>%
+                filter(Billed.Qty > 1,
+                       Date != "Date",
+                       Billing.Model == "NCM")%>%
+                select(-c(Billing.Model))%>%
+                filter(Hit.Type == "Unique"|
+                       Hit.Type == "Uniques")%>%
+                mutate(Division = ifelse(Division == "Sell Side"| Division == "Sellside", 2,
+                                  ifelse(Division == "Buy Side" | Division == "Buyside", 1,
+                                  ifelse(Division == "Custody"| Division == "Custodial", 3,
+                                  ifelse(Division == "Other",5,0))))) %>%
+                mutate(Date = ifelse(Date == "20171231", 12,
+                              ifelse(Date == "20171130", 11,
+                              ifelse(Date == "20171031.0", 10,
+                              ifelse(Date == "20170930.0", 9,
+                              ifelse(Date ==  "20170831", 8,
+                              ifelse(Date == "20170731.0", 7,0)))))))%>%
+                mutate(Service = ifelse(Service == 'Ad Hoc',1,0))%>%
+                filter(Date !=0)%>%
+                na.omit() %>%
+                mutate(Firm.Num = round(Firm.Num/10),
+                         Account.Num =round( Account.Num/10),
+                       Billed.Qty = round(Billed.Qty/10))%>%
+                left_join(ncm.mapping)%>%
+                left_join(dl.ac.mapping)%>%
+                select(-c(Category,Asset.Class,Hit.Type))%>%
+                rename(Category = Mapping, Asset.Class = Ac.Mapping)%>%
+                arrange(desc(Billed.Qty))
+kable(head(clean.data,15),  caption = "Cleaned Data")
+```
+#### **Summary of the "scrubbed" data:**
+- The cleaned data subset has ~421 K rows and 8 columns 
+- A sumary of the cleaned data is below
+  -  the quantity has a wide distribution
+- The bubble chart and bar chart below show the mean quantity by asset class and category  
+  -  Asset class 1, 2 & 3 have the highest usage 
+  -  Category 8,7 & 9 seem to be the most used per asset class
+```{r echo= TRUE}
+dim(clean.data)
+summary(clean.data)
+```
+```{r echo = TRUE}
+group.df <- clean.data %>%
+            select(-c(Firm.Num, Division, Service))%>%
+            group_by(Asset.Class, Category)%>%
+            na.omit() %>%
+            summarise(Billed.Qty = mean(Billed.Qty))%>%
+            arrange(desc(Billed.Qty))
+ggplot(group.df, aes(x = Asset.Class, y = Category, label = Category)) +
+    geom_point(aes(size = Billed.Qty, colour = Asset.Class)) + 
+    geom_text(hjust = 1, size = 2) +
+    scale_size(range = c(1,15)) +
+    theme_bw()
+```
+
+```{r echo = TRUE}
+g <- ggplot(group.df, aes(reorder(Asset.Class, -Billed.Qty)))
+g + geom_bar(aes(fill= Category), width = 0.5) +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) +
+  labs(x = 'Asset.Class',
+       y = 'Qty',
+       title="Asset Class by Category Bar Chart", 
+       caption="Source: Cleaned Dataset")
+```
+
+### **Explore the Data:**
+
+-  Repivot the data from long to wide. The 6 months of data from rows to columns
+-  Calculate the weighted average usage over a 6 month period 
+-  Calculate the Frequency over the 6 month period
+-  Calculate the Recency over the 6 month period
+-  Group by asset class
+-  Summarize by RFM metrics: 
+    - Frequency(Max),the more frequent the better
+    - Recency (Max), the more recent the better
+    - Amount(Sum), the higher the better
+
+```{r echo = TRUE, warning = FALSE, message=FALSE}
+clean.data.w <- reshape(clean.data, direction = "wide", idvar = c("Firm.Num", "Division","Account.Num", "Service","Category","Asset.Class"), timevar = "Date")
+kable(head(clean.data.w,15),  caption = "Wide Usage Table")
+```
+
+```{r echo = TRUE}
+rfm.table <- clean.data.w %>%
+                rename('7' = Billed.Qty.7,
+                       '8' = Billed.Qty.8,
+                      '9' = Billed.Qty.9,
+                       '10' =Billed.Qty.10,
+                       '11' =Billed.Qty.11,
+                       '12' =Billed.Qty.12)%>%
+                replace(is.na(.),0)%>%
+                mutate(total = rowSums(.[7:12]))%>%
+                mutate(Wgt.Avg = round(((rowSums(.[7])/rowSums(.[7:12])*rowSums(.[7]))+
+                                 (rowSums(.[8])/rowSums(.[7:12])*rowSums(.[8]))+
+                                 (rowSums(.[9])/rowSums(.[7:12])*rowSums(.[9]))+
+                                 (rowSums(.[10])/rowSums(.[7:12])*rowSums(.[10]))+
+                                 (rowSums(.[11])/rowSums(.[7:12])*rowSums(.[11]))+
+                                 (rowSums(.[12])/rowSums(.[7:12])*rowSums(.[12])))))%>%
+                mutate(Last.Usage = ifelse(rowSums(.[12]) !=0,5,
+                                    ifelse(rowSums(.[11]) !=0,4,      
+                                    ifelse(rowSums(.[10]) !=0,3,  
+                                    ifelse(rowSums(.[9]) !=0,2,  
+                                    ifelse(rowSums(.[8]) !=0,1,  
+                                    ifelse(rowSums(.[7]) !=0,0,0))))))) %>%
+                mutate(Frequency = rowSums(.[,7:12] >0))%>%
+                select(c(Firm.Num, Division, Account.Num, Service, Category, Asset.Class, total, Wgt.Avg, Last.Usage, Frequency))%>%
+                group_by(Firm.Num, Division, Account.Num, Service, Asset.Class)%>%
+                summarize(Frequency = max(Frequency),
+                          Recency = max(Last.Usage),
+                          Amount = sum(Wgt.Avg))%>%
+              arrange(desc(Amount))
+
+kable(head(rfm.table,15),  caption = "Restructured Usage Table")
+
+
+```
+
+
+```{r}
+ggplot(rfm.table, aes(x=reorder(Asset.Class, -Amount), y= Amount)) + 
+  geom_bar(stat="identity", width=.5, fill="slategray2") +
+  geom_text(aes(label=Amount))+
+  labs(x='Asset Class', 
+       y='Weighted Qty',
+       title="Weighted Usage Qty by Asset Class", 
+       caption="Source: RFM Table Dataset") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+```
+
+#### **Model:**
+-  Loop throgh the dataframe by asset class to get the relevant RFM Scores (peer group analysis)
+    - Ntile() was used to partition the data. Great function!
+-  The higher the score the better the customer 
+  -  Bougth most recently, with frequency and a lot
+```{r echo = TRUE}
+temp.list = list()
+df.total = data.frame()
+unique <- unique(unlist(rfm.table$Asset.Class))
+
+for (i in 1:length(unique)){
+  temp.df <- subset(rfm.table, Asset.Class == unique[i])
+  temp.df$Amt.tile <- ntile(temp.df$Amount, 10)
+  temp.df$Frq.tile <- ntile(temp.df$Frequency, 4)
+  temp.df$Rec.tile <- ntile(temp.df$Recency, 4)
+  
+  temp.list[[i]]<- temp.df
+  
+}
+rfm.final <- do.call(rbind, temp.list)%>%
+            mutate_if(is.integer, as.character)%>%
+            mutate(Score = paste(Amt.tile, Frq.tile, Rec.tile))%>%
+            mutate(Score= str_replace_all(Score, fixed(" "), ""))%>%
+            select(-c(Amt.tile, Frq.tile, Rec.tile))%>%
+            mutate(Score = as.integer(Score),
+                   Amount = as.integer(Amount),
+                   Recency = as.integer(Recency),
+                   Frequency = as.integer(Frequency))%>%
+            arrange(desc(Score))%>%
+            mutate(Counter = 1)
+
+kable(head(rfm.final,15),  caption = "RFM Table")
+```
+```{r echo = TRUE}
+agg.df <- rfm.final%>%
+          group_by(Asset.Class, Score)%>%
+          summarise(Counter = sum(Counter))%>%
+          arrange(desc(Counter))%>%
+          mutate(Cust.Type)
+kable(agg.df,  caption = "RFM Table By Score")
+```
+
+
+```{r echo = TRUE}
+ggplot(agg.df, aes(x = Score, y = Asset.Class, label = Asset.Class)) +
+    geom_point(aes(size = Counter, colour = Asset.Class)) + 
+    geom_text(hjust = 1, size = 2) +
+    scale_size(range = c(1,15)) +
+    theme_bw()
+```
+
+
