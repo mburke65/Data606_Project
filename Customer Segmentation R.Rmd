@@ -50,11 +50,11 @@ library(stringr)
 - Asset class mapping file "dl.ac"
 
 ```{r echo = TRUE}
-raw.data  <- '//corp.bloomberg.com/ny-dfs/Global Data/Other Shared Folders/Worldwide/Global Data/CRA/BI Data Sets/DLME/DLPS/CSV_Meaghan_Versions/csv/2017 Data/combined_2017.csv'
+raw.data  <- '...../combined_2017.csv'
 
-ncm <- "//corp.bloomberg.com/ny-dfs/Global Data/Other Shared Folders/Worldwide/Global Data/CRA/Work Area/Personal Work Area/Meaghan/Tech Working Group/Sales_Prediction/ncm_mapping.csv"
+ncm <- "/..../Sales_Prediction/ncm_mapping.csv"
 
-dl.ac <- "//corp.bloomberg.com/ny-dfs/Global Data/Other Shared Folders/Worldwide/Global Data/CRA/Work Area/Personal Work Area/Meaghan/Tech Working Group/Sales_Prediction/dl_asset_class_mapping.csv"
+dl.ac <- "/..../dl_asset_class_mapping.csv"
 
 ```
 
@@ -113,9 +113,9 @@ clean.data <- initial.data%>%
                 mutate(Service = ifelse(Service == 'Ad Hoc',1,0))%>%
                 filter(Date !=0)%>%
                 na.omit() %>%
-                mutate(Firm.Num = round(Firm.Num/10),
-                         Account.Num =round( Account.Num/10),
-                       Billed.Qty = round(Billed.Qty/10))%>%
+                mutate(Firm.Num = round(Firm.Num/x),
+                         Account.Num =round( Account.Num/x),
+                       Billed.Qty = round(Billed.Qty/x))%>%
                 left_join(ncm.mapping)%>%
                 left_join(dl.ac.mapping)%>%
                 select(-c(Category,Asset.Class,Hit.Type))%>%
