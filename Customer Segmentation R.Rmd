@@ -46,8 +46,8 @@ library(stringr)
 #### **Obtain The Data:**
 
 - 2017 aggregated sales data (aggregated offline with the linux "cat" command)
-- Category mapping file "ncm"
-- Asset class mapping file "dl.ac"
+- Category mapping file "x"
+- Asset class mapping file "y"
 
 ```{r echo = TRUE}
 raw.data  <- '...../combined_2017.csv'
