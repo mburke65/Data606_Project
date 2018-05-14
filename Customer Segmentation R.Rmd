@@ -7,7 +7,7 @@ output: html_document
 ### **Data 607- Final Project:**
 
 #### **Introduction:**
-I currently work as a business intelligence analyst supporting both sales and product managers for a fin-tech firm. Much of my job is using data to help the two groups make informed product and client decisions. For this final project, I would will apply the skills learned in this class to a sampling of data from work to see if I can find actionable insights.
+I currently work as a business intelligence analyst supporting both sales and product managers for a firm. Much of my job is using data to help the two groups make informed product and client decisions. For this final project, I would will apply the skills learned in this class to a sampling of data from work to see if I can find actionable insights.
 
 #### **Project Goals- RFM:**
 
@@ -52,9 +52,9 @@ library(stringr)
 ```{r echo = TRUE}
 raw.data  <- '...../combined_2017.csv'
 
-ncm <- "...../ncm_mapping.csv"
+x <- "...../x.csv"
 
-dl.ac <- "....dl_asset_class_mapping.csv"
+y <- "....y.csv"
 
 ```
 
@@ -62,11 +62,11 @@ dl.ac <- "....dl_asset_class_mapping.csv"
 
 initial.data <- read.table(raw.data,  sep=',', encoding='latin-1',header = FALSE, fill = TRUE)
 
-ncm.mapping  <-read.table(ncm,sep=',', encoding='latin-1')%>%
+x <-read.table(ncm,sep=',', encoding='latin-1')%>%
                 rename(Category =V1, Mapping = V2)%>%
                 mutate_if(is.factor, as.character)
 
-dl.ac.mapping = read.table(dl.ac,   sep=',', encoding='latin-1')%>%
+y <- read.table(y,   sep=',', encoding='latin-1')%>%
                 rename(Asset.Class = V1, Ac.Mapping = V2)%>%
                 mutate_if(is.factor, as.character)
 
@@ -96,21 +96,21 @@ clean.data <- initial.data%>%
                 mutate_if(is.factor, as.character)%>%
                 filter(Billed.Qty > 1,
                        Date != "Date",
-                       Billing.Model == "NCM")%>%
+                       Billing.Model == "ccc")%>%
                 select(-c(Billing.Model))%>%
-                filter(Hit.Type == "Unique"|
-                       Hit.Type == "Uniques")%>%
-                mutate(Division = ifelse(Division == "Sell Side"| Division == "Sellside", 2,
-                                  ifelse(Division == "Buy Side" | Division == "Buyside", 1,
-                                  ifelse(Division == "Custody"| Division == "Custodial", 3,
-                                  ifelse(Division == "Other",5,0))))) %>%
+                filter(Hit.Type == "bq"|
+                       Hit.Type == "qq")%>%
+                mutate(Division = ifelse(Division == "aa"| Division == "a a", 2,
+                                  ifelse(Division == "bb" | Division == "b b", 1,
+                                  ifelse(Division == "cc"| Division == "c c", 3,
+                                  ifelse(Division == "oo",5,0))))) %>%
                 mutate(Date = ifelse(Date == "20171231", 12,
                               ifelse(Date == "20171130", 11,
                               ifelse(Date == "20171031.0", 10,
                               ifelse(Date == "20170930.0", 9,
                               ifelse(Date ==  "20170831", 8,
                               ifelse(Date == "20170731.0", 7,0)))))))%>%
-                mutate(Service = ifelse(Service == 'Ad Hoc',1,0))%>%
+                mutate(Service = ifelse(Service == 'xx',1,0))%>%
                 filter(Date !=0)%>%
                 na.omit() %>%
                 mutate(Firm.Num = round(Firm.Num/x),
